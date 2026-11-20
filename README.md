@@ -1,7 +1,3 @@
-[![Tweet](https://img.shields.io/twitter/url/http/shields.io.svg?style=social)](https://twitter.com/intent/tweet?text=Check%20out%20Driver%20Drowsiness%20Detection%20project%20on%20Github%20&url=https://github.com/mohitwildbeast/Driver-Drowsiness-Detector/&hashtags=python,drowsiness-detector,opencv,computer-vision,machine-learning,deep-learning)  [![GitHub stars](https://img.shields.io/github/stars/mohitwildbeast/Driver-Drowsiness-Detector.svg?style=plastic)](https://github.com/mohitwildbeast/Driver-Drowsiness-Detector/stargazers)  [![GitHub forks](https://img.shields.io/github/forks/mohitwildbeast/Driver-Drowsiness-Detector.svg?style=plastic)](https://github.com/mohitwildbeast/Driver-Drowsiness-Detector/network)
-
-
-
 This program is used to detect drowsiness for any given person. In this program we check how long a person's eyes have been closed for. If the eyes have been closed for a long period i.e. beyond a certain threshold value, the program will alert the user by playing an alarm sound.
 
 The program contains 3 files, which are
@@ -12,7 +8,7 @@ The program contains 3 files, which are
 |  ![Test Image](https://github.com/NullV-ctor/Drowsiness/blob/main/images/test.jpeg)| ![Result Image](https://github.com/NullV-ctor/Drowsiness/blob/main/images/result_face_detector_single_image.png) |
 |---|---|
 
- - **face_and_eye_detector_webcam_video.py** - Detects face and eye in a webcam feed by user![Webcam Face and Eye Detection]((https://github.com/NullV-ctor/Drowsiness/blob/main/images/Video_screenshot_20.11.2026.png))
+ - **face_and_eye_detector_webcam_video.py** - Detects face and eye in a webcam feed by user![Webcam Face and Eye Detection](https://github.com/NullV-ctor/Drowsiness/blob/main/images/Video_screenshot_20.11.2026.png)
  - **drowsiness_detect.py**- This script detects if person is drowsy or not using webcam video feed
 
 > DEMO
