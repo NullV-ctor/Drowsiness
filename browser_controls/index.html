@@ -1,13 +1,16 @@
 <!doctype html><html><head><meta charset="utf-8"><style>
-body{font:14px system-ui;margin:8px;color:#243447}button{padding:9px 12px;margin:4px;border:1px solid #aaa;border-radius:6px;background:#fff;cursor:pointer}p{margin:5px}#status{white-space:pre-line}
+body{font:14px system-ui;margin:8px;color:inherit;color-scheme:light dark}button{padding:9px 12px;margin:4px;border:1px solid #aaa;border-radius:6px;background:#fff;cursor:pointer}p{margin:5px}#status{white-space:pre-line}
+video{width:100%;max-height:340px;background:#222;border-radius:8px}#camera{display:none}
 </style></head><body>
+<div id="camera"><video id="preview" autoplay muted playsinline></video><button id="startCamera">Start camera</button><button id="stopCamera">Stop camera</button><p id="cameraStatus">Camera stopped.</p></div>
 <button id="sound">Enable browser alarm</button><button id="location">Allow current location</button><button id="stopLocation">Stop location sharing</button>
 <p id="status" role="status">Alarm disabled. Location not requested.</p>
 <script>
 const post=(type,data={})=>window.parent.postMessage({isStreamlitMessage:true,type,...data},'*');
 let ctx=null,osc=null,gain=null,armed=false,alarm=false,watch=null,fix=null,locationStatus='not requested',sharing=false,lastHeartbeat=0,lastPublish=0;
 const status=()=>document.getElementById('status').textContent=`Alarm: ${armed?'enabled':'disabled'}${alarm&&armed?' — sounding':''}. Location: ${locationStatus}.`;
-const publish=()=>{post('streamlit:setComponentValue',{value:{armed,location:fix,location_status:locationStatus,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone},dataType:'json'});};
+let cameraValue={};
+const publish=()=>{post('streamlit:setComponentValue',{value:{...cameraValue,armed,location:fix,location_status:locationStatus,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone},dataType:'json'});};
 function silence(){if(osc){try{osc.stop();osc.disconnect();}catch(e){}osc=null;}alarm=false;status();}
 function sound(){if(document.hidden||!armed||!ctx||ctx.state!=='running')return;alarm=true;if(!osc){osc=ctx.createOscillator();gain=ctx.createGain();gain.gain.value=.12;osc.frequency.value=880;osc.connect(gain);gain.connect(ctx.destination);osc.start();}status();}
 document.getElementById('sound').onclick=async()=>{if(armed){armed=false;silence();}else{ctx=ctx||new(window.AudioContext||window.webkitAudioContext)();await ctx.resume();armed=true;}
@@ -17,10 +20,38 @@ if(watch!==null)navigator.geolocation.clearWatch(watch);locationStatus='requesti
 sharing=true;watch=navigator.geolocation.watchPosition(pos=>{if(!sharing)return;fix={latitude:pos.coords.latitude,longitude:pos.coords.longitude,accuracy:pos.coords.accuracy,timestamp:pos.timestamp/1000};locationStatus=`available (+/-${pos.coords.accuracy.toFixed(0)} m)`;status();if(Date.now()-lastPublish>1500){lastPublish=Date.now();publish();}},err=>{if(!sharing)return;fix=null;locationStatus=err.code===1?'denied':'unavailable';status();publish();},{enableHighAccuracy:true,maximumAge:0,timeout:10000});};
 document.getElementById('stopLocation').onclick=()=>{if(watch!==null)navigator.geolocation.clearWatch(watch);watch=null;sharing=false;fix=null;locationStatus='stopped';status();publish();};
 window.addEventListener('message',event=>{if(event.source!==window.parent||event.data.type!=='streamlit:render')return;
-lastHeartbeat=Date.now();if(event.data.args.alarm)sound();else silence();});
+lastHeartbeat=Date.now();if(event.data.args.camera!==undefined&&window.cameraRender)window.cameraRender(event.data.args);if(event.data.args.alarm)sound();else silence();});
 // Stop on a stalled/disconnected app, hidden tab, navigation, or stopped stream.
 setInterval(()=>{if(Date.now()-lastHeartbeat>700)silence();},100);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)silence();});
 window.addEventListener('pagehide',()=>{silence();if(watch!==null)navigator.geolocation.clearWatch(watch);});
 post('streamlit:componentReady',{apiVersion:1});post('streamlit:setFrameHeight',{height:120});status();
+</script><script>
+// One frame in flight: server acknowledges before another JPEG is captured.
+let cameraStream=null,pending=false,sequence=Date.now(),lastSent=0,enabled=false;
+const video=document.getElementById('preview'), cameraStatus=document.getElementById('cameraStatus');
+const canvas=document.createElement('canvas');canvas.width=480;canvas.height=360;
+function stopCamera(){if(cameraStream)cameraStream.getTracks().forEach(track=>track.stop());cameraStream=null;video.srcObject=null;pending=false;cameraValue={camera_active:false};silence();cameraStatus.textContent='Camera stopped.';publish();}
+document.getElementById('startCamera').onclick=async()=>{
+ if(cameraStream)return;
+ try{cameraStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:480},height:{ideal:360},frameRate:{ideal:8,max:10}},audio:false});
+ video.srcObject=cameraStream;await video.play();cameraStatus.textContent='Camera connected. Waiting for analysis.';cameraValue={camera_active:true};publish();}
+ catch(error){stopCamera();cameraStatus.textContent=error.name==='NotAllowedError'?'Camera permission denied. Allow camera access in your browser and try again.':'Camera unavailable. Close other camera apps, then try again.';}
+};
+document.getElementById('stopCamera').onclick=stopCamera;
+window.cameraRender=args=>{enabled=!!args.camera;document.getElementById('camera').style.display=enabled?'block':'none';post('streamlit:setFrameHeight',{height:enabled?510:120});
+ if(pending&&args.ack===cameraValue.frame_id){pending=false;cameraValue={camera_active:!!cameraStream};}
+ if(cameraStream&&args.camera_status)cameraStatus.textContent=args.camera_status;
+};
+setInterval(()=>{
+ if(!enabled||!cameraStream||document.hidden||video.readyState<2)return;
+ if(pending){if(Date.now()-lastSent>3000){silence();cameraStatus.textContent='Connection is slow. Waiting for the server; alarm paused.';}return;}
+ if(Date.now()-lastHeartbeat>3000)return;
+ canvas.height=Math.round(480*video.videoHeight/video.videoWidth);
+ canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+ cameraValue={camera_active:true,frame_id:++sequence,captured_at:Date.now()/1000,frame:canvas.toDataURL('image/jpeg',0.65)};
+ pending=true;lastSent=Date.now();publish();
+},200);
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&cameraStream)stopCamera();});
+window.addEventListener('pagehide',()=>{if(cameraStream)cameraStream.getTracks().forEach(track=>track.stop());});
 </script></body></html>

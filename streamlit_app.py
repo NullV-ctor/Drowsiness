@@ -189,131 +189,239 @@ with live_tab:
     st.caption(
         "HTTPS or localhost is required. Camera and location permissions are controlled by your browser."
     )
-    try:
-        import av
-        from streamlit_webrtc import VideoProcessorBase, WebRtcMode, webrtc_streamer
-
-        class VideoProcessor(VideoProcessorBase):
-            def __init__(self):
-                self.lock = Lock()
-                self.latest = None
-                self.monitor = monitor
-                self.detector = detector
-                self.threshold = ear_threshold
-
-            def recv(self, frame):
-                image = frame.to_ndarray(format="bgr24")
-                if image.shape[1] > 800:
-                    image = cv2.resize(
-                        image, (800, round(image.shape[0] * 800 / image.shape[1]))
-                    )
-                observation = self.detector.observe(image, self.threshold)
-                now = time.monotonic()
-                state = self.monitor.observe(
-                    observation["closed"] if observation else None,
-                    image,
-                    timestamp=now,
-                    box=observation["box"] if observation else None,
-                )
-                status = (
-                    "NO FACE"
-                    if observation is None
-                    else "DROWSY"
-                    if state.alarm
-                    else "EYES CLOSED"
-                    if observation["closed"]
-                    else "EYES OPEN"
-                )
-                output = annotate(image, observation, status, state.closed_seconds)
-                with self.lock:
-                    self.latest = {
-                        "time": now,
-                        "status": status,
-                        "ear": observation["ear"] if observation else None,
-                        "state": state,
-                    }
-                return av.VideoFrame.from_ndarray(output, format="bgr24")
-
-        stream_key = hashlib.sha256(monitor_key.encode()).hexdigest()[:12]
-        rtc_config = settings.get(
-            "rtc_configuration",
-            {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-        )
-        context = webrtc_streamer(
-            key=f"eyes-{stream_key}",
-            mode=WebRtcMode.SENDRECV,
-            video_processor_factory=VideoProcessor,
-            media_stream_constraints={
-                "video": {"width": {"ideal": 640}, "height": {"ideal": 480}},
-                "audio": False,
-            },
-            rtc_configuration=rtc_config,
-            async_processing=False,
+    transport = st.selectbox(
+        "Camera connection",
+        ["HTTPS camera (recommended)", "WebRTC (requires TURN on some networks)"],
+        disabled=playing,
+    )
+    if transport.startswith("HTTPS"):
+        st.caption(
+            "Frames are analyzed over the app connection. Only consented episode screenshots are saved."
         )
 
-        @st.fragment(run_every=0.1)
-        def live_status():
-            changed = (
-                st.session_state.get("stream_playing", False) != context.state.playing
+        @st.fragment(run_every=0.2)
+        def https_camera():
+            previous = st.session_state.get("https_result", {})
+            fresh = time.monotonic() - previous.get("received", 0) < 0.7
+            value = (
+                browser_controls(
+                    camera=True,
+                    ack=st.session_state.get("https_ack", 0),
+                    camera_status=previous.get("status", "Waiting for camera"),
+                    alarm=bool(fresh and previous.get("alarm")),
+                    key="https-camera-controls",
+                    default={},
+                )
+                or {}
             )
-            st.session_state.stream_playing = context.state.playing
-            if changed:
-                st.rerun()
-            row = None
-            if context.video_processor:
-                with context.video_processor.lock:
-                    row = context.video_processor.latest
-            fresh = bool(
-                context.state.playing and row and time.monotonic() - row["time"] <= 0.5
-            )
-            if not fresh:
-                monitor.observe(None)
-            alarm = bool(fresh and row["state"].alarm)
-            browser = (
-                browser_controls(alarm=alarm, key="driver-browser", default={}) or {}
-            )
-            st.session_state.latest_location = browser.get("location")
-            monitor.configure(consent, messaging, browser.get("location"))
-            if browser.get("timezone"):
+            active = bool(value.get("camera_active"))
+            monitor.configure(consent, messaging, value.get("location"))
+            st.session_state.latest_location = value.get("location")
+            if value.get("timezone"):
                 try:
-                    ZoneInfo(browser["timezone"])
-                    st.session_state.browser_timezone = browser["timezone"]
+                    ZoneInfo(value["timezone"])
+                    st.session_state.browser_timezone = value["timezone"]
                 except (ValueError, KeyError):
                     pass
-            if not browser.get("armed"):
-                st.info(
-                    "Browser alarm is disabled. Click Enable browser alarm to permit sound."
-                )
-            if fresh:
-                cols = st.columns(3)
-                cols[0].metric("State", row["status"])
-                cols[1].metric(
-                    "Continuous closure", f"{row['state'].closed_seconds:.1f}s"
-                )
-                cols[2].metric(
-                    "EAR", f"{row['ear']:.3f}" if row["ear"] is not None else "—"
-                )
-                if row["status"] == "NO FACE":
-                    st.warning(
-                        "No face detected. Alarm is off and continuous closure has reset."
+            frame_id = value.get("frame_id")
+            if frame_id and frame_id != st.session_state.get("https_ack"):
+                st.session_state.https_ack = frame_id
+                try:
+                    from camera_transport import decode_camera_frame
+
+                    image = decode_camera_frame(value)
+                    observation = detector.observe(image, ear_threshold, upsample=0)
+                    state = monitor.observe(
+                        observation["closed"] if observation else None,
+                        image,
+                        box=observation["box"] if observation else None,
                     )
-                elif alarm:
-                    st.error("Drowsiness episode active: eyes closed.")
-            elif context.state.playing:
-                st.warning("Waiting for a fresh face observation; alarm off.")
+                    status = (
+                        "NO FACE"
+                        if observation is None
+                        else "DROWSY"
+                        if state.alarm
+                        else "EYES CLOSED"
+                        if observation["closed"]
+                        else "EYES OPEN"
+                    )
+                    st.session_state.https_result = {
+                        "received": time.monotonic(),
+                        "alarm": state.alarm,
+                        "status": status,
+                        "ear": observation["ear"] if observation else None,
+                        "seconds": state.closed_seconds,
+                    }
+                except (ValueError, cv2.error):
+                    monitor.observe(None)
+                    st.session_state.https_result = {
+                        "status": "Frame delayed or invalid; waiting for a fresh frame",
+                        "alarm": False,
+                    }
+            elif not fresh or not active:
+                monitor.observe(None)
+                st.session_state.https_result = {
+                    "status": "Camera stopped"
+                    if not active
+                    else "Waiting for a fresh frame",
+                    "alarm": False,
+                }
+            result = st.session_state.get("https_result", {})
+            st.write(result.get("status", "Waiting for camera"))
+            if result.get("ear") is not None:
+                st.caption(
+                    f"EAR: {result['ear']:.3f} · Continuous closure: {result['seconds']:.1f} s"
+                )
+            if result.get("status") == "NO FACE":
+                st.warning(
+                    "No face detected. Face the camera in good lighting; alarm is off."
+                )
+            if not value.get("armed"):
+                st.info("Click Enable browser alarm to permit sound.")
             jobs = store.jobs(owner)
             if jobs:
                 st.write("TEST delivery status")
                 st.dataframe(jobs, hide_index=True)
-            elif not messaging:
-                st.caption("TEST messaging is disabled. No messages will be sent.")
+            if st.session_state.get("stream_playing", False) != active:
+                st.session_state.stream_playing = active
+                st.rerun()
 
-        live_status()
-    except ImportError:
-        st.info(
-            "Install requirements.txt for browser webcam streaming. Upload analysis remains available."
-        )
+        https_camera()
+    else:
+        try:
+            import av
+            from streamlit_webrtc import VideoProcessorBase, WebRtcMode, webrtc_streamer
 
+            class VideoProcessor(VideoProcessorBase):
+                def __init__(self):
+                    self.lock = Lock()
+                    self.latest = None
+                    self.monitor = monitor
+                    self.detector = detector
+                    self.threshold = ear_threshold
+
+                def recv(self, frame):
+                    image = frame.to_ndarray(format="bgr24")
+                    if image.shape[1] > 800:
+                        image = cv2.resize(
+                            image, (800, round(image.shape[0] * 800 / image.shape[1]))
+                        )
+                    observation = self.detector.observe(
+                        image, self.threshold, upsample=0
+                    )
+                    now = time.monotonic()
+                    state = self.monitor.observe(
+                        observation["closed"] if observation else None,
+                        image,
+                        timestamp=now,
+                        box=observation["box"] if observation else None,
+                    )
+                    status = (
+                        "NO FACE"
+                        if observation is None
+                        else "DROWSY"
+                        if state.alarm
+                        else "EYES CLOSED"
+                        if observation["closed"]
+                        else "EYES OPEN"
+                    )
+                    output = annotate(image, observation, status, state.closed_seconds)
+                    with self.lock:
+                        self.latest = {
+                            "time": now,
+                            "status": status,
+                            "ear": observation["ear"] if observation else None,
+                            "state": state,
+                        }
+                    return av.VideoFrame.from_ndarray(output, format="bgr24")
+
+            stream_key = hashlib.sha256(monitor_key.encode()).hexdigest()[:12]
+            rtc_config = settings.get(
+                "rtc_configuration",
+                {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
+            )
+            context = webrtc_streamer(
+                key=f"eyes-{stream_key}",
+                mode=WebRtcMode.SENDRECV,
+                video_processor_factory=VideoProcessor,
+                media_stream_constraints={
+                    "video": {
+                        "width": {"ideal": 640},
+                        "height": {"ideal": 480},
+                        "frameRate": {"ideal": 8, "max": 10},
+                    },
+                    "audio": False,
+                },
+                rtc_configuration=rtc_config,
+                async_processing=False,
+            )
+
+            @st.fragment(run_every=0.1)
+            def live_status():
+                changed = (
+                    st.session_state.get("stream_playing", False)
+                    != context.state.playing
+                )
+                st.session_state.stream_playing = context.state.playing
+                if changed:
+                    st.rerun()
+                row = None
+                if context.video_processor:
+                    with context.video_processor.lock:
+                        row = context.video_processor.latest
+                fresh = bool(
+                    context.state.playing
+                    and row
+                    and time.monotonic() - row["time"] <= 0.5
+                )
+                if not fresh:
+                    monitor.observe(None)
+                alarm = bool(fresh and row["state"].alarm)
+                browser = (
+                    browser_controls(alarm=alarm, key="driver-browser", default={})
+                    or {}
+                )
+                st.session_state.latest_location = browser.get("location")
+                monitor.configure(consent, messaging, browser.get("location"))
+                if browser.get("timezone"):
+                    try:
+                        ZoneInfo(browser["timezone"])
+                        st.session_state.browser_timezone = browser["timezone"]
+                    except (ValueError, KeyError):
+                        pass
+                if not browser.get("armed"):
+                    st.info(
+                        "Browser alarm is disabled. Click Enable browser alarm to permit sound."
+                    )
+                if fresh:
+                    cols = st.columns(3)
+                    cols[0].metric("State", row["status"])
+                    cols[1].metric(
+                        "Continuous closure", f"{row['state'].closed_seconds:.1f}s"
+                    )
+                    cols[2].metric(
+                        "EAR", f"{row['ear']:.3f}" if row["ear"] is not None else "—"
+                    )
+                    if row["status"] == "NO FACE":
+                        st.warning(
+                            "No face detected. Alarm is off and continuous closure has reset."
+                        )
+                    elif alarm:
+                        st.error("Drowsiness episode active: eyes closed.")
+                elif context.state.playing:
+                    st.warning("Waiting for a fresh face observation; alarm off.")
+                jobs = store.jobs(owner)
+                if jobs:
+                    st.write("TEST delivery status")
+                    st.dataframe(jobs, hide_index=True)
+                elif not messaging:
+                    st.caption("TEST messaging is disabled. No messages will be sent.")
+
+            live_status()
+        except ImportError:
+            st.info(
+                "Install requirements.txt for browser webcam streaming. Upload analysis remains available."
+            )
 with image_tab:
     st.subheader("Check a face image")
     source = st.radio("Image source", ["Upload", "Take a photo"], horizontal=True)

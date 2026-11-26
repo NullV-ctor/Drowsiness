@@ -82,11 +82,11 @@ class FaceEyeDetector:
         self.classifier = EyeClassifier(model_path) if model_path else None
         self.lock = Lock()
 
-    def observe(self, frame, ear_threshold=0.3):
+    def observe(self, frame, ear_threshold=0.3, upsample=1):
         """Monitor the largest face only. Do not accumulate time across faces."""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         with self.lock:
-            faces = self.detector(gray, 1)
+            faces = self.detector(gray, upsample)
             if not faces:
                 return None
             face = max(faces, key=lambda f: f.width() * f.height())

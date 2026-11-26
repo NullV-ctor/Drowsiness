@@ -495,6 +495,21 @@ Do not commit secrets. Some networks require authenticated TURN in addition to S
 
 ## Streamlit Community Cloud deployment
 
+The default **HTTPS camera** sends small JPEG frames through Streamlit's existing
+connection, so it does not require a separate STUN/TURN media connection. Its
+local preview stays smooth; analysis runs at up to five frames per second and
+waits for each server acknowledgement before capturing another frame. Actual
+analysis rate depends on network latency and server load. Delayed frames are
+rejected; gaps stop the alarm and reset continuous-closure timing. Keep the tab
+visible and use **Stop camera** to release the device. Live images are temporary;
+only explicitly consented episode screenshots are stored.
+
+The optional **WebRTC** mode remains available. A STUN-only configuration can
+time out on Community Cloud or restricted networks; configure an authenticated
+TURN server in Streamlit Secrets to use that mode on those networks. The
+account/avatar 404 messages from Streamlit's hosting interface are independent
+of the application's camera transport.
+
 Live app: [Drowsiness Monitor](https://nullv-ctor-drowsiness.streamlit.app/).
 Verified on 27 November 2026: cloud build succeeded with Python 3.11,
 the trained classifier loaded, real evaluation metrics appeared, and the
