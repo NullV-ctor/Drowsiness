@@ -1,0 +1,26 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{font:14px system-ui;margin:8px;color:#243447}button{padding:9px 12px;margin:4px;border:1px solid #aaa;border-radius:6px;background:#fff;cursor:pointer}p{margin:5px}#status{white-space:pre-line}
+</style></head><body>
+<button id="sound">Enable browser alarm</button><button id="location">Allow current location</button><button id="stopLocation">Stop location sharing</button>
+<p id="status" role="status">Alarm disabled. Location not requested.</p>
+<script>
+const post=(type,data={})=>window.parent.postMessage({isStreamlitMessage:true,type,...data},'*');
+let ctx=null,osc=null,gain=null,armed=false,alarm=false,watch=null,fix=null,locationStatus='not requested',sharing=false,lastHeartbeat=0,lastPublish=0;
+const status=()=>document.getElementById('status').textContent=`Alarm: ${armed?'enabled':'disabled'}${alarm&&armed?' — sounding':''}. Location: ${locationStatus}.`;
+const publish=()=>{post('streamlit:setComponentValue',{value:{armed,location:fix,location_status:locationStatus,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone},dataType:'json'});};
+function silence(){if(osc){try{osc.stop();osc.disconnect();}catch(e){}osc=null;}alarm=false;status();}
+function sound(){if(document.hidden||!armed||!ctx||ctx.state!=='running')return;alarm=true;if(!osc){osc=ctx.createOscillator();gain=ctx.createGain();gain.gain.value=.12;osc.frequency.value=880;osc.connect(gain);gain.connect(ctx.destination);osc.start();}status();}
+document.getElementById('sound').onclick=async()=>{if(armed){armed=false;silence();}else{ctx=ctx||new(window.AudioContext||window.webkitAudioContext)();await ctx.resume();armed=true;}
+document.getElementById('sound').textContent=armed?'Disable browser alarm':'Enable browser alarm';status();publish();};
+document.getElementById('location').onclick=()=>{if(!navigator.geolocation){locationStatus='unavailable';status();publish();return;}
+if(watch!==null)navigator.geolocation.clearWatch(watch);locationStatus='requesting permission';status();
+sharing=true;watch=navigator.geolocation.watchPosition(pos=>{if(!sharing)return;fix={latitude:pos.coords.latitude,longitude:pos.coords.longitude,accuracy:pos.coords.accuracy,timestamp:pos.timestamp/1000};locationStatus=`available (+/-${pos.coords.accuracy.toFixed(0)} m)`;status();if(Date.now()-lastPublish>1500){lastPublish=Date.now();publish();}},err=>{if(!sharing)return;fix=null;locationStatus=err.code===1?'denied':'unavailable';status();publish();},{enableHighAccuracy:true,maximumAge:0,timeout:10000});};
+document.getElementById('stopLocation').onclick=()=>{if(watch!==null)navigator.geolocation.clearWatch(watch);watch=null;sharing=false;fix=null;locationStatus='stopped';status();publish();};
+window.addEventListener('message',event=>{if(event.source!==window.parent||event.data.type!=='streamlit:render')return;
+lastHeartbeat=Date.now();if(event.data.args.alarm)sound();else silence();});
+// Stop on a stalled/disconnected app, hidden tab, navigation, or stopped stream.
+setInterval(()=>{if(Date.now()-lastHeartbeat>700)silence();},100);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)silence();});
+window.addEventListener('pagehide',()=>{silence();if(watch!==null)navigator.geolocation.clearWatch(watch);});
+post('streamlit:componentReady',{apiVersion:1});post('streamlit:setFrameHeight',{height:120});status();
+</script></body></html>

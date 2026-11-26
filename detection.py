@@ -19,16 +19,20 @@ def eye_aspect_ratio(points):
     width = np.linalg.norm(points[0] - points[3])
     if width <= 0:
         return 0.0
-    return float((np.linalg.norm(points[1] - points[5])
-                  + np.linalg.norm(points[2] - points[4])) / (2 * width))
+    return float(
+        (np.linalg.norm(points[1] - points[5]) + np.linalg.norm(points[2] - points[4]))
+        / (2 * width)
+    )
 
 
 def crop_eye(gray, points):
     x, y, w, h = cv2.boundingRect(points.astype(np.int32))
     # Consistent padded rectangular crops; collect training eyes the same way.
     pad_x, pad_y = max(2, round(w * 0.15)), max(2, round(w * 0.25))
-    return gray[max(0, y - pad_y):min(gray.shape[0], y + h + pad_y),
-                max(0, x - pad_x):min(gray.shape[1], x + w + pad_x)]
+    return gray[
+        max(0, y - pad_y) : min(gray.shape[0], y + h + pad_y),
+        max(0, x - pad_x) : min(gray.shape[1], x + w + pad_x),
+    ]
 
 
 @dataclass
@@ -48,8 +52,13 @@ class ClosureTracker:
         if box is not None and self.last_box is not None:
             a, b = self.last_box, box
             intersection = max(0, min(a[2], b[2]) - max(a[0], b[0])) * max(
-                0, min(a[3], b[3]) - max(a[1], b[1]))
-            union = (a[2]-a[0]) * (a[3]-a[1]) + (b[2]-b[0]) * (b[3]-b[1]) - intersection
+                0, min(a[3], b[3]) - max(a[1], b[1])
+            )
+            union = (
+                (a[2] - a[0]) * (a[3] - a[1])
+                + (b[2] - b[0]) * (b[3] - b[1])
+                - intersection
+            )
             if union <= 0 or intersection / union < 0.3:
                 self.closed_since = None
         self.last_time, self.last_box = timestamp, box
@@ -65,7 +74,9 @@ class ClosureTracker:
 class FaceEyeDetector:
     def __init__(self, model_path=None, predictor_path=PREDICTOR_PATH):
         if not Path(predictor_path).is_file():
-            raise FileNotFoundError(f"Extract the landmark predictor first: {predictor_path}")
+            raise FileNotFoundError(
+                f"Extract the landmark predictor first: {predictor_path}"
+            )
         self.detector = dlib.get_frontal_face_detector()
         self.predictor = dlib.shape_predictor(str(predictor_path))
         self.classifier = EyeClassifier(model_path) if model_path else None
@@ -92,10 +103,14 @@ class FaceEyeDetector:
             closed = bool(np.all(margins >= 0))
         else:
             closed = ear < ear_threshold
-        return {"closed": closed, "ear": ear, "eyes": eyes,
-                "box": (face.left(), face.top(), face.right(), face.bottom()),
-                "face_count": len(faces),
-                "margins": margins.tolist() if margins is not None else None}
+        return {
+            "closed": closed,
+            "ear": ear,
+            "eyes": eyes,
+            "box": (face.left(), face.top(), face.right(), face.bottom()),
+            "face_count": len(faces),
+            "margins": margins.tolist() if margins is not None else None,
+        }
 
 
 def annotate(frame, observation, status, elapsed=0.0):
@@ -103,19 +118,41 @@ def annotate(frame, observation, status, elapsed=0.0):
     text_scale = min(1.0, max(0.3, output.shape[1] / 640))
     thickness = max(1, round(2 * text_scale))
     origin_x = max(4, round(12 * text_scale))
-    color = (0, 0, 255) if status == "DROWSY" else (0, 200, 255) if status == "EYES CLOSED" else (70, 210, 80)
+    color = (
+        (0, 0, 255)
+        if status == "DROWSY"
+        else (0, 200, 255)
+        if status in ("EYES CLOSED", "NO FACE")
+        else (70, 210, 80)
+    )
     if observation:
         x1, y1, x2, y2 = observation["box"]
         cv2.rectangle(output, (x1, y1), (x2, y2), color, 2)
         for eye in observation["eyes"]:
             cv2.polylines(output, [eye.astype(np.int32)], True, color, 1)
         detail = f"EAR {observation['ear']:.3f} | closed {elapsed:.1f}s"
-        cv2.putText(output, detail, (origin_x, round(56 * text_scale)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.55 * text_scale, color, thickness)
-    cv2.putText(output, status, (origin_x, round(28 * text_scale)),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.8 * text_scale, color, thickness)
+        cv2.putText(
+            output,
+            detail,
+            (origin_x, round(56 * text_scale)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55 * text_scale,
+            color,
+            thickness,
+        )
+    cv2.putText(
+        output,
+        status,
+        (origin_x, round(28 * text_scale)),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.8 * text_scale,
+        color,
+        thickness,
+    )
     if status == "DROWSY":
-        cv2.rectangle(output, (0, 0), (output.shape[1]-1, output.shape[0]-1), color, 6)
+        cv2.rectangle(
+            output, (0, 0), (output.shape[1] - 1, output.shape[0] - 1), color, 6
+        )
     return output
 
 
@@ -125,12 +162,22 @@ def analyze_frame(detector, tracker, frame, timestamp, ear_threshold=0.3):
         frame = cv2.resize(frame, (800, round(frame.shape[0] * 800 / frame.shape[1])))
     observation = detector.observe(frame, ear_threshold)
     elapsed, drowsy = tracker.update(
-        observation["closed"] if observation else None, timestamp,
-        observation["box"] if observation else None)
-    status = ("NO FACE" if observation is None else "DROWSY" if drowsy
-              else "EYES CLOSED" if observation["closed"] else "EYES OPEN")
+        observation["closed"] if observation else None,
+        timestamp,
+        observation["box"] if observation else None,
+    )
+    status = (
+        "NO FACE"
+        if observation is None
+        else "DROWSY"
+        if drowsy
+        else "EYES CLOSED"
+        if observation["closed"]
+        else "EYES OPEN"
+    )
     return annotate(frame, observation, status, elapsed), {
-        "time_seconds": round(timestamp, 3), "status": status,
+        "time_seconds": round(timestamp, 3),
+        "status": status,
         "ear": observation["ear"] if observation else None,
         "closed_seconds": round(elapsed, 3),
         "faces": observation["face_count"] if observation else 0,

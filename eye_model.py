@@ -29,7 +29,9 @@ class EyeClassifier:
     def __init__(self, path):
         with np.load(Path(path), allow_pickle=False) as data:
             if str(data["feature_version"].item()) != FEATURE_VERSION:
-                raise ValueError("Incompatible model. Retrain with the current notebook.")
+                raise ValueError(
+                    "Incompatible model. Retrain with the current notebook."
+                )
             self.mean = data["mean"].copy()
             self.scale = data["scale"].copy()
             self.coef = data["coef"].ravel().copy()

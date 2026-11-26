@@ -45,18 +45,22 @@ class ClosureTests(unittest.TestCase):
         class NoFaceDetector:
             def observe(self, frame, threshold):
                 return None
-        output, row = analyze_frame(NoFaceDetector(), ClosureTracker(),
-                                    np.zeros((240, 320, 3), np.uint8), 0)
-        self.assertEqual(row['status'], 'NO FACE')
-        self.assertIsNone(row['ear'])
+
+        output, row = analyze_frame(
+            NoFaceDetector(), ClosureTracker(), np.zeros((240, 320, 3), np.uint8), 0
+        )
+        self.assertEqual(row["status"], "NO FACE")
+        self.assertIsNone(row["ear"])
         self.assertEqual(output.shape, (240, 320, 3))
 
 
 class FeatureTests(unittest.TestCase):
     def test_grayscale_and_color_have_same_features(self):
         eye = np.random.default_rng(7).integers(0, 255, (45, 80), dtype=np.uint8)
-        np.testing.assert_allclose(extract_features(eye),
-                                   extract_features(cv2.cvtColor(eye, cv2.COLOR_GRAY2BGR)))
+        np.testing.assert_allclose(
+            extract_features(eye),
+            extract_features(cv2.cvtColor(eye, cv2.COLOR_GRAY2BGR)),
+        )
         self.assertEqual(extract_features(eye).shape, (756,))
 
     def test_empty_eye_rejected(self):
@@ -80,19 +84,27 @@ class FeatureTests(unittest.TestCase):
         model.fit(X, y)
         scaler, svm = model.steps[0][1], model.steps[1][1]
         with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / 'model.npz'
-            arrays = dict(mean=scaler.mean_, scale=scaler.scale_, coef=svm.coef_,
-                          intercept=svm.intercept_[0], feature_version=np.array(FEATURE_VERSION))
+            path = Path(folder) / "model.npz"
+            arrays = dict(
+                mean=scaler.mean_,
+                scale=scaler.scale_,
+                coef=svm.coef_,
+                intercept=svm.intercept_[0],
+                feature_version=np.array(FEATURE_VERSION),
+            )
             np.savez_compressed(path, **arrays)
             portable = EyeClassifier(path)
-            np.testing.assert_allclose(portable.decision_function(images),
-                                       model.decision_function(X), atol=1e-6)
+            np.testing.assert_allclose(
+                portable.decision_function(images),
+                model.decision_function(X),
+                atol=1e-6,
+            )
             np.testing.assert_array_equal(portable.predict(images), model.predict(X))
-            arrays['feature_version'] = np.array('old-version')
+            arrays["feature_version"] = np.array("old-version")
             np.savez_compressed(path, **arrays)
-            with self.assertRaisesRegex(ValueError, 'Incompatible'):
+            with self.assertRaisesRegex(ValueError, "Incompatible"):
                 EyeClassifier(path)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

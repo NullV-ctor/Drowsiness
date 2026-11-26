@@ -1,0 +1,202 @@
+{
+  "experiment": "MRL eye-state CPU development-cap experiment",
+  "data_source": {
+    "source": "MRL Eye Dataset",
+    "source_page": "https://mrl.cs.vsb.cz/eyedataset.html",
+    "archive_url": "https://mrl.cs.vsb.cz/data/eyedataset/mrlEyes_2018_01.zip",
+    "archive_sha256": "17ff89928005cb6e63a53fe020e419060279ff59e57555cfa49693fc1865fdfc",
+    "images": 84898,
+    "people": 37,
+    "label_mapping": "MRL closed=0/open=1 -> project open=0/closed=1",
+    "terms": "Consult the original dataset provider; no license is inferred by this importer."
+  },
+  "data_audit": {
+    "retained_images": 84827,
+    "people": 37,
+    "class_counts": {
+      "open": 42916,
+      "closed": 41911
+    },
+    "issue_counts": {
+      "low_contrast_review": 321,
+      "conflicting_labels": 66,
+      "exact_duplicate": 5
+    },
+    "excluded_images": 71,
+    "brightness_by_class": {
+      "count": {
+        "closed": 41911.0,
+        "open": 42916.0
+      },
+      "mean": {
+        "closed": 82.04073572132378,
+        "open": 94.48690802184875
+      },
+      "std": {
+        "closed": 19.757460603492643,
+        "open": 30.729166385389128
+      },
+      "min": {
+        "closed": 26.71355,
+        "open": 21.156229565917208
+      },
+      "25%": {
+        "closed": 68.49660427959043,
+        "open": 76.78737825520834
+      },
+      "50%": {
+        "closed": 79.29783037475345,
+        "open": 87.11352513022803
+      },
+      "75%": {
+        "closed": 90.28302582019833,
+        "open": 101.02631819151367
+      },
+      "max": {
+        "closed": 213.77541371158392,
+        "open": 222.27613018846108
+      }
+    },
+    "notes": [
+      "Brightness is measured before equalization.",
+      "Low-contrast images are flagged, not automatically removed.",
+      "Exact pixel duplicates are removed; near-duplicate frames may remain within a person."
+    ],
+    "imported_images_before_quality_checks": 84898,
+    "imported_class_counts": {
+      "open": 42952,
+      "closed": 41946
+    },
+    "people_by_source_gender_code": {
+      "0": 32,
+      "1": 5
+    }
+  },
+  "results": {
+    "accuracy": 0.8771435672272389,
+    "balanced_accuracy": 0.8783675167584155,
+    "precision": 0.8421547134356404,
+    "recall": 0.9188450367332992,
+    "f1": 0.8788299697687719,
+    "roc_auc": 0.9533058018373051,
+    "closed_f1": 0.8788299697687719,
+    "classification_report": {
+      "open": {
+        "precision": 0.9164467897977133,
+        "recall": 0.8378899967835317,
+        "f1-score": 0.8754095606149711,
+        "support": 12436
+      },
+      "closed": {
+        "precision": 0.8421547134356404,
+        "recall": 0.9188450367332992,
+        "f1-score": 0.8788299697687719,
+        "support": 11706
+      },
+      "accuracy": 0.8771435672272389,
+      "macro avg": {
+        "precision": 0.8793007516166769,
+        "recall": 0.8783675167584155,
+        "f1-score": 0.8771197651918715,
+        "support": 24142
+      },
+      "weighted avg": {
+        "precision": 0.8804239646011918,
+        "recall": 0.8771435672272389,
+        "f1-score": 0.8770680524364604,
+        "support": 24142
+      }
+    },
+    "confusion_matrix_labels": [
+      "open",
+      "closed"
+    ],
+    "confusion_matrix": [
+      [
+        10420,
+        2016
+      ],
+      [
+        950,
+        10756
+      ]
+    ],
+    "task": "single-eye open/closed classification; not video drowsiness",
+    "created_utc": "2026-11-26T18:08:39.966342+00:00",
+    "feature_version": "equalized-hog-64x32-v1",
+    "selected_C": 0.001,
+    "selected_params": {
+      "C": 0.001,
+      "class_weight": "balanced",
+      "augmentation": false
+    },
+    "counts": {
+      "development_used": 5107,
+      "test": 24142
+    },
+    "development_people": [
+      "s0001",
+      "s0002",
+      "s0003",
+      "s0004",
+      "s0006",
+      "s0008",
+      "s0009",
+      "s0010",
+      "s0011",
+      "s0012",
+      "s0013",
+      "s0015",
+      "s0016",
+      "s0017",
+      "s0019",
+      "s0020",
+      "s0021",
+      "s0022",
+      "s0023",
+      "s0024",
+      "s0025",
+      "s0028",
+      "s0029",
+      "s0031",
+      "s0032",
+      "s0033",
+      "s0034",
+      "s0035",
+      "s0037"
+    ],
+    "test_people": [
+      "s0005",
+      "s0007",
+      "s0014",
+      "s0018",
+      "s0026",
+      "s0027",
+      "s0030",
+      "s0036"
+    ],
+    "cv_best_balanced_accuracy": 0.7891715680920615,
+    "model_sha256": "df33abfa308a2bf55c1a0a526fa17946121a82c52c57a023dea017c6f0daa8ab",
+    "majority_baseline_accuracy": 0.48488112003976475,
+    "seed": 42,
+    "split_protocol": "Person-held-out test; GroupKFold on development only",
+    "cv_folds": 5,
+    "training_cap_per_person_class": 100,
+    "development_available": 60685,
+    "dataset_retained": 84827,
+    "dataset_fingerprint": "803623bce4579bd392f1097f12f7fca08941bad99cf775b07cd03b7aa1b404ea",
+    "test_downsampled": false,
+    "software_versions": {
+      "numpy": "1.26.4",
+      "opencv-python": "4.10.0.84",
+      "scikit-learn": "1.2.2",
+      "pandas": "2.1.4",
+      "matplotlib": "3.8.0"
+    },
+    "python_version": "3.11.7"
+  },
+  "unmeasured": {
+    "ear": "Requires a labeled full-face benchmark shared with SVM.",
+    "video_drowsiness": "Requires held-out full videos and event/interval ground truth."
+  }
+}
