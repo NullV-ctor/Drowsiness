@@ -493,6 +493,35 @@ iceServers = [{ urls = ["stun:your-stun-server:3478"] }]
 
 Do not commit secrets. Some networks require authenticated TURN in addition to STUN; see the [streamlit-webrtc deployment guide](https://github.com/whitphx/streamlit-webrtc#network-connectivity).
 
+## Streamlit Community Cloud deployment
+
+Deploy repository `NullV-ctor/Drowsiness`, branch `main`, entrypoint
+`cloud/app.py`, and select **Python 3.11** under Advanced settings.
+The entrypoint runs the same application as `streamlit_app.py`.
+`cloud/requirements.txt` installs only browser app dependencies, with headless
+OpenCV and a prebuilt `dlib-bin` wheel to avoid compiling dlib on the cloud host.
+The root requirements remain available for notebook training and desktop scripts.
+Streamlit's dependency selection is described in its
+[deployment documentation](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/app-dependencies).
+
+The real trained model is included at `models/eye_state_model.npz`.
+`experiments/deployment_metrics.json` is a copy of the executed notebook's
+metrics, checked against that model's SHA-256. Model Insights uses it when
+the local ignored `reports/metrics.json` is absent. Training images are not
+needed on the hosting server.
+
+Set actual credentials in the cloud app's Secrets panel using
+`.streamlit/secrets.example.toml` as a reference; never use its placeholder
+values as real credentials. Telegram TEST messaging needs your own authorized
+test recipient. Networks that block direct WebRTC need authenticated TURN.
+Cloud SQLite storage is temporary, and browser session history is not a login
+system. Durable storage and authenticated accounts remain separate work.
+
+After deployment, check the HTTPS app, camera permissions and video connection,
+browser alarm, location allow/deny flows, screenshot consent/deletion, and PDF
+download on a real device. No live deployment or device check is implied by
+local automated tests.
+
 ## Original scripts
 
 Run from the project folder in the installed environment:

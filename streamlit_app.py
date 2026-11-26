@@ -491,6 +491,8 @@ with shots_tab:
 
 with results_tab:
     report_path = ROOT / "reports" / "metrics.json"
+    if not report_path.exists():
+        report_path = ROOT / "experiments" / "deployment_metrics.json"
     if report_path.exists():
         try:
             metrics = json.loads(report_path.read_text())
