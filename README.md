@@ -495,6 +495,13 @@ Do not commit secrets. Some networks require authenticated TURN in addition to S
 
 ## Streamlit Community Cloud deployment
 
+Live app: [Drowsiness Monitor](https://nullv-ctor-drowsiness.streamlit.app/).
+Verified on 27 November 2026: cloud build succeeded with Python 3.11,
+the trained classifier loaded, real evaluation metrics appeared, and the
+Reports page plus browser camera/alarm/location controls rendered.
+Physical camera, audible alarm, GPS, and Telegram delivery still require
+device checks and your own test-recipient credentials.
+
 Deploy repository `NullV-ctor/Drowsiness`, branch `main`, entrypoint
 `cloud/app.py`, and select **Python 3.11** under Advanced settings.
 The entrypoint runs the same application as `streamlit_app.py`.
