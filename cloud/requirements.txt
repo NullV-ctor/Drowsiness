@@ -1,6 +1,8 @@
 # Runtime only. Choose Python 3.11 in Streamlit Cloud Advanced settings.
 # dlib-bin supplies prebuilt dlib wheels, avoiding a C++ build on the host.
 numpy==1.26.4
+# Newer Arrow wheels require NumPy 2 even when package metadata allows 1.x.
+pyarrow==19.0.1
 opencv-python-headless==4.10.0.84
 dlib-bin==20.0.0
 streamlit>=1.49,<2
