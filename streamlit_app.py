@@ -23,9 +23,9 @@ from detection import (
     FaceEyeDetector,
     analyze_frame,
     annotate,
+    observation_status,
 )
 from episode_store import EpisodeStore
-from episodes import EpisodeTracker
 from monitoring import Monitor
 from emergency_alerts import AlertDispatcher, TelegramSender
 from episode_reports import report_rows, report_csv, report_pdf
@@ -60,9 +60,9 @@ st.set_page_config(page_title="Drowsiness Monitor", page_icon="👁️", layout=
 
 
 @st.cache_resource
-def load_detector(model_path, model_modified):
+def load_detector(model_path, model_modified, inference_mode):
     # Timestamp invalidates the cached classifier after notebook training.
-    return FaceEyeDetector(model_path=model_path)
+    return FaceEyeDetector(model_path=model_path, mode=inference_mode)
 
 
 def csv_bytes(rows):
@@ -74,13 +74,42 @@ def csv_bytes(rows):
 
 
 st.title("Drowsiness Monitor")
-st.caption("Train your eye-state model in the notebook, then test it here.")
+st.caption("Monitor eye closure, review recordings, and download episode reports.")
+st.markdown(
+    """<style>
+.block-container {padding-top: 2.5rem; padding-bottom: 3rem;}
+.stButton button, .stDownloadButton button {min-height: 2.75rem;}
+[data-testid="stSidebar"] .block-container {padding-top: 1rem;}
+</style>""",
+    unsafe_allow_html=True,
+)
+page = st.radio(
+    "Workspace",
+    [
+        "Live webcam",
+        "Image / snapshot",
+        "Video analysis",
+        "Reports",
+        "Consented screenshots",
+        "Model insights",
+    ],
+    horizontal=True,
+    key="workspace",
+)
+if st.session_state.get("last_page", page) != page:
+    st.session_state.stream_playing = False
+    st.session_state.pop("https_result", None)
+    st.session_state.pop("https_ack", None)
+    if "monitor" in st.session_state:
+        st.session_state.monitor.observe(None)
+    playing = False
+st.session_state.last_page = page
 with st.sidebar:
     st.header("Detection settings")
     trained = MODEL_PATH.is_file()
     method = st.selectbox(
         "Detection method",
-        ["Trained eye classifier", "EAR threshold"],
+        ["Hybrid (recommended)", "EAR threshold", "SVM only (experimental)"],
         index=0 if trained else 1,
         disabled=playing,
     )
@@ -103,16 +132,29 @@ with st.sidebar:
         emergency_config.get("bot_token")
         and emergency_config.get("chat_id")
         and emergency_config.get("provider", "telegram") == "telegram"
+        and not str(emergency_config.get("bot_token", "")).startswith("YOUR_")
+        and not str(emergency_config.get("chat_id", "")).startswith("YOUR_")
     )
     messaging = st.checkbox(
         "Enable TEST alerts to the configured Telegram test recipient",
+        help="Separate from screenshot consent. Requires a Telegram bot token and authorized test chat ID in Streamlit secrets.",
         value=False,
         disabled=not configured,
     )
     if not configured:
-        st.caption(
-            "TEST messaging is unavailable until emergency secrets contain a bot token and test chat_id."
+        st.info(
+            "Telegram is not configured. Screenshot consent does not enable messaging."
         )
+        with st.expander("How to enable Telegram TEST alerts"):
+            st.write(
+                "Add a bot token and your authorized test chat ID to Streamlit Secrets (or .streamlit/secrets.toml locally), then restart the app."
+            )
+            st.code(
+                '[emergency]\nprovider = "telegram"\nbot_token = "YOUR_BOT_TOKEN"\nchat_id = "YOUR_TEST_CHAT_ID"',
+                language="toml",
+            )
+    else:
+        st.caption("Telegram configured. TEST alerts require this separate opt-in.")
     st.caption(
         "An episode ends after 0.5 seconds of observed open eyes. No face is unknown, never closed."
     )
@@ -120,12 +162,12 @@ with st.sidebar:
         "EAR threshold",
         0.1,
         0.4,
-        0.3,
+        0.25,
         0.01,
-        disabled=playing or method != "EAR threshold",
+        disabled=playing,
     )
     st.caption(
-        "The largest visible face is monitored. Both eyes must be classified closed."
+        "Hybrid uses clear eye geometry and checks SVM agreement near the threshold. Disagreement is uncertain and does not trigger an alert."
     )
     if trained:
         st.success("Trained model available")
@@ -141,16 +183,18 @@ if playing and "active_configuration" in st.session_state:
 else:
     st.session_state.active_configuration = proposed_configuration
 
-if method == "Trained eye classifier" and not trained:
+if method != "EAR threshold" and not trained:
     st.warning(
         "No trained model yet. Run the notebook, or select EAR threshold in the sidebar."
     )
     st.stop()
 
 try:
-    model_file = str(MODEL_PATH) if method == "Trained eye classifier" else None
+    model_file = str(MODEL_PATH) if method != "EAR threshold" else None
     model_stamp = MODEL_PATH.stat().st_mtime_ns if model_file else 0
-    detector = load_detector(model_file, model_stamp)
+    detector = load_detector(
+        model_file, model_stamp, "svm" if method.startswith("SVM") else "hybrid"
+    )
 except (OSError, ValueError, RuntimeError, KeyError) as exc:
     st.error(f"Could not load the detector: {exc}")
     st.stop()
@@ -170,18 +214,7 @@ if st.session_state.get("monitor_key") != monitor_key:
 monitor = st.session_state.monitor
 monitor.configure(consent, messaging, st.session_state.get("latest_location"))
 
-live_tab, image_tab, video_tab, report_tab, shots_tab, results_tab = st.tabs(
-    [
-        "Live webcam",
-        "Image / snapshot",
-        "Video analysis",
-        "Reports",
-        "Consented screenshots",
-        "Model insights",
-    ]
-)
-
-with live_tab:
+if page == "Live webcam":
     st.subheader("Live browser camera")
     st.caption(
         "Enable the browser alarm below, then START the camera. Location sharing is optional; missing location never blocks a TEST alert."
@@ -236,21 +269,14 @@ with live_tab:
                         image,
                         box=observation["box"] if observation else None,
                     )
-                    status = (
-                        "NO FACE"
-                        if observation is None
-                        else "DROWSY"
-                        if state.alarm
-                        else "EYES CLOSED"
-                        if observation["closed"]
-                        else "EYES OPEN"
-                    )
+                    status = observation_status(observation, state.alarm)
                     st.session_state.https_result = {
                         "received": time.monotonic(),
                         "alarm": state.alarm,
                         "status": status,
                         "ear": observation["ear"] if observation else None,
                         "seconds": state.closed_seconds,
+                        "reason": observation.get("reason", "") if observation else "",
                     }
                 except (ValueError, cv2.error):
                     monitor.observe(None)
@@ -261,13 +287,21 @@ with live_tab:
             elif not fresh or not active:
                 monitor.observe(None)
                 st.session_state.https_result = {
-                    "status": "Camera stopped"
-                    if not active
-                    else "Waiting for a fresh frame",
+                    "status": (
+                        "Camera stopped" if not active else "Waiting for a fresh frame"
+                    ),
                     "alarm": False,
                 }
             result = st.session_state.get("https_result", {})
-            st.write(result.get("status", "Waiting for camera"))
+            status_text = result.get("status", "Waiting for camera")
+            if status_text == "DROWSY":
+                st.error("Drowsiness episode active — eyes closed")
+            elif status_text in ("EYES CLOSED", "UNCERTAIN"):
+                st.warning(status_text + ": " + result.get("reason", ""))
+            elif status_text == "EYES OPEN":
+                st.success("Eyes open")
+            else:
+                st.write(status_text)
             if result.get("ear") is not None:
                 st.caption(
                     f"EAR: {result['ear']:.3f} · Continuous closure: {result['seconds']:.1f} s"
@@ -316,15 +350,7 @@ with live_tab:
                         timestamp=now,
                         box=observation["box"] if observation else None,
                     )
-                    status = (
-                        "NO FACE"
-                        if observation is None
-                        else "DROWSY"
-                        if state.alarm
-                        else "EYES CLOSED"
-                        if observation["closed"]
-                        else "EYES OPEN"
-                    )
+                    status = observation_status(observation, state.alarm)
                     output = annotate(image, observation, status, state.closed_seconds)
                     with self.lock:
                         self.latest = {
@@ -406,6 +432,10 @@ with live_tab:
                         st.warning(
                             "No face detected. Alarm is off and continuous closure has reset."
                         )
+                    elif row["status"] == "UNCERTAIN":
+                        st.warning(
+                            "Eye state uncertain. Adjust lighting or sensitivity; alarm off."
+                        )
                     elif alarm:
                         st.error("Drowsiness episode active: eyes closed.")
                 elif context.state.playing:
@@ -422,7 +452,7 @@ with live_tab:
             st.info(
                 "Install requirements.txt for browser webcam streaming. Upload analysis remains available."
             )
-with image_tab:
+if page == "Image / snapshot":
     st.subheader("Check a face image")
     source = st.radio("Image source", ["Upload", "Take a photo"], horizontal=True)
     picture = (
@@ -446,9 +476,14 @@ with image_tab:
                 caption=row["status"],
                 width=min(800, max(320, output.shape[1])),
             )
+            st.info(row["status"] + " — " + row.get("reason", ""))
             st.caption(
                 "A photo shows eye state only; video is needed to measure sustained closure."
             )
+            if method.startswith("SVM"):
+                st.warning(
+                    "Experimental SVM: MRL eye crops differ from full-face photos. Use Hybrid for monitoring."
+                )
             if row["faces"] > 1:
                 st.info("Multiple faces detected; showing the largest face.")
             encoded = cv2.imencode(".png", output)[1].tobytes()
@@ -456,106 +491,78 @@ with image_tab:
                 "Download annotated image", encoded, "eye_result.png", "image/png"
             )
 
-with video_tab:
+if page == "Video analysis":
     st.subheader("Analyze a recorded video")
+    st.info(
+        "Video review samples about 5 frames per second for faster processing. Very brief blinks between samples may be missed."
+    )
     upload = st.file_uploader("Video", type=["mp4", "avi", "mov", "mkv"])
     st.caption(
         "Processes at most 120 seconds. Recorded videos use media time and never send live TEST messages or automatically save face screenshots."
     )
-    settings = (method, duration, ear_threshold, model_stamp)
+    video_settings = (method, duration, ear_threshold, model_stamp)
     identity = (
-        (hashlib.sha256(upload.getvalue()).hexdigest(), settings) if upload else None
+        (hashlib.sha256(upload.getvalue()).hexdigest(), video_settings)
+        if upload
+        else None
     )
-    if st.button("Analyze video", disabled=upload is None):
-        rows, last_frame = [], None
-        tracker = EpisodeTracker(delay=duration)
-        video_episodes = []
-        preview, progress = st.empty(), st.progress(0.0)
-        with tempfile.TemporaryDirectory(prefix="drowsiness-") as folder:
-            path = Path(folder) / f"input{Path(upload.name).suffix}"
-            path.write_bytes(upload.getvalue())
-            capture = cv2.VideoCapture(str(path))
-            try:
-                if not capture.isOpened():
-                    st.error(
-                        "Cannot open this video. Try an MP4 with a supported codec."
-                    )
-                else:
-                    fps = capture.get(cv2.CAP_PROP_FPS)
-                    if not np.isfinite(fps) or fps <= 0:
-                        st.error(
-                            "The video has no valid frame rate; closure durations cannot be measured."
-                        )
-                    else:
-                        limit = max(1, int(fps * 120))
-                        total = capture.get(cv2.CAP_PROP_FRAME_COUNT)
-                        expected = min(total, limit) if total > 0 else limit
-                        for index in range(limit):
-                            ok, frame = capture.read()
-                            if not ok:
-                                break
-                            # Media timestamps provide a clock independent of inference speed.
-                            if frame.shape[1] > 800:
-                                frame = cv2.resize(
-                                    frame,
-                                    (800, round(frame.shape[0] * 800 / frame.shape[1])),
-                                )
-                            observation = detector.observe(frame, ear_threshold)
-                            from datetime import timezone, timedelta
+    if st.button("Analyze video", disabled=upload is None, type="primary"):
+        from video_analysis import analyze_video
 
-                            state = tracker.update(
-                                observation["closed"] if observation else None,
-                                index / fps,
-                                datetime(2000, 1, 1, tzinfo=timezone.utc)
-                                + timedelta(seconds=index / fps),
-                            )
-                            if state.started:
-                                video_episodes.append(state.started)
-                            status = (
-                                "NO FACE"
-                                if observation is None
-                                else "DROWSY"
-                                if state.alarm
-                                else "EYES CLOSED"
-                                if observation["closed"]
-                                else "EYES OPEN"
-                            )
-                            last_frame = annotate(
-                                frame, observation, status, state.closed_seconds
-                            )
-                            row = {
-                                "time_seconds": index / fps,
-                                "status": status,
-                                "ear": observation["ear"] if observation else None,
-                                "closed_seconds": state.closed_seconds,
-                                "faces": observation["face_count"]
-                                if observation
-                                else 0,
-                            }
-                            rows.append(row)
-                            if index % max(1, int(fps / 4)) == 0:
-                                preview.image(
-                                    last_frame, channels="BGR", width="stretch"
-                                )
-                                progress.progress(min((index + 1) / expected, 1.0))
-            finally:
-                capture.release()
-        progress.empty()
-        if rows:
+        preview, progress = st.empty(), st.progress(0.0)
+        last_preview = [0.0]
+
+        def update_video(fraction, frame):
+            progress.progress(fraction)
+            if time.monotonic() - last_preview[0] > 0.5:
+                preview.image(frame, channels="BGR", width="stretch")
+                last_preview[0] = time.monotonic()
+
+        try:
+            with tempfile.TemporaryDirectory(prefix="drowsiness-") as folder:
+                path = Path(folder) / f"input{Path(upload.name).suffix}"
+                path.write_bytes(upload.getvalue())
+                with st.spinner("Analyzing sampled frames using video time…"):
+                    result = analyze_video(
+                        path, detector, duration, ear_threshold, update_video
+                    )
+                st.session_state.video_result = (identity, result)
+        except (ValueError, cv2.error, OSError) as exc:
+            st.session_state.pop("video_result", None)
+            st.error(str(exc))
+        finally:
+            progress.empty()
             preview.empty()
-            st.session_state.video_result = (identity, rows, last_frame)
-        else:
-            st.warning("No frames were analyzed.")
     saved = st.session_state.get("video_result")
     if saved and saved[0] == identity:
-        _, rows, last_frame = saved
+        result = saved[1]
+        rows = result["rows"]
         cols = st.columns(3)
-        cols[0].metric("Analyzed frames", len(rows))
-        cols[1].metric("Frames with a face", sum(r["faces"] > 0 for r in rows))
-        cols[2].metric("Drowsy frames", sum(r["status"] == "DROWSY" for r in rows))
-        st.image(last_frame, channels="BGR", width="stretch")
-        st.line_chart({"closed_seconds": [r["closed_seconds"] for r in rows]})
-        st.caption("Horizontal axis: decoded frame index.")
+        cols[0].metric("Analyzed time", f"{result['analyzed_seconds']:.1f} s")
+        cols[1].metric("Sampled frames", len(rows))
+        cols[2].metric("Episodes", len(result["episodes"]))
+        st.caption(
+            f"Sample rate: {result['sample_fps']:.1f} fps. Durations use the video timeline. Clips longer than 120 s are limited to the first 120 s."
+        )
+        st.image(result["last_frame"], channels="BGR", width="stretch")
+        if result["episodes"]:
+            st.dataframe(result["episodes"], hide_index=True)
+            st.download_button(
+                "Download video episodes (CSV)",
+                csv_bytes(result["episodes"]),
+                "video_episodes.csv",
+                "text/csv",
+            )
+        else:
+            st.info(
+                "No sustained eye-closure episodes detected in the analyzed interval."
+            )
+        import pandas as pd
+
+        st.line_chart(
+            pd.DataFrame(rows).set_index("time_seconds")[["closed_seconds"]],
+            x_label="Video time (seconds)",
+        )
         st.download_button(
             "Download frame results (CSV)",
             csv_bytes(rows),
@@ -563,7 +570,7 @@ with video_tab:
             "text/csv",
         )
 
-with report_tab:
+if page == "Reports":
     zone = st.session_state.get("browser_timezone", "Asia/Kolkata")
     selected_date = st.date_input(
         "Report date", value=datetime.now(ZoneInfo(zone)).date()
@@ -585,19 +592,20 @@ with report_tab:
         "text/csv",
     )
 
-with shots_tab:
+if page == "Consented screenshots":
     st.caption(
         "Only screenshots saved with consent in this browser session and driver profile appear here. Deleting an image does not delete its episode count."
     )
     if st.button("Delete all my episode screenshots"):
         store.delete_all_screenshots(owner)
+        st.rerun()
     for shot in store.screenshots(owner):
         st.image(shot["screenshot"], caption=shot["started_at"], width=320)
         if st.button("Delete this screenshot", key="delete-" + shot["id"]):
             store.delete_screenshot(owner, shot["id"])
             st.rerun()
 
-with results_tab:
+if page == "Model insights":
     report_path = ROOT / "reports" / "metrics.json"
     if not report_path.exists():
         report_path = ROOT / "experiments" / "deployment_metrics.json"
@@ -618,7 +626,7 @@ with results_tab:
             for col, key in zip(cols, ("accuracy", "balanced_accuracy", "closed_f1")):
                 col.metric(key.replace("_", " ").title(), f"{metrics[key]:.3f}")
             st.caption(
-                "Scores measure eye-state classification, not clinical drowsiness detection."
+                "These are the saved SVM-only results on MRL eye crops. Hybrid full-face inference has not been benchmarked; these scores do not measure video drowsiness accuracy."
             )
             st.json(metrics)
             for name in ("confusion_matrix.png", "example_predictions.png"):

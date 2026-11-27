@@ -10,7 +10,7 @@ from pathlib import Path
 
 import cv2
 
-from detection import FaceEyeDetector, annotate
+from detection import FaceEyeDetector, annotate, observation_status
 from episode_store import EpisodeStore
 from monitoring import Monitor
 
@@ -64,15 +64,7 @@ def main():
             if not state.alarm:
                 alert.stop()
             sounding = state.alarm
-            status = (
-                "NO FACE"
-                if observation is None
-                else "DROWSY"
-                if state.alarm
-                else "EYES CLOSED"
-                if observation["closed"]
-                else "EYES OPEN"
-            )
+            status = observation_status(observation, state.alarm)
             cv2.imshow(
                 "Video", annotate(frame, observation, status, state.closed_seconds)
             )

@@ -10,7 +10,14 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 
-from detection import ClosureTracker, analyze_frame, crop_eye, eye_aspect_ratio
+from detection import (
+    ClosureTracker,
+    analyze_frame,
+    crop_eye,
+    eye_aspect_ratio,
+    classify_observation,
+    observation_status,
+)
 from eye_model import FEATURE_VERSION, EyeClassifier, extract_features
 
 
@@ -55,6 +62,27 @@ class ClosureTests(unittest.TestCase):
 
 
 class FeatureTests(unittest.TestCase):
+    def test_hybrid_corrects_strong_geometry_svm_disagreement(self):
+        self.assertFalse(classify_observation([0.38, 0.36], [1.37, 0.67])[0])
+        self.assertTrue(classify_observation([0.14, 0.17], [-0.18, 0.64])[0])
+        # Raw experiment remains unchanged, making the domain mismatch explicit.
+        self.assertTrue(classify_observation([0.38, 0.36], [1.37, 0.67], mode="svm")[0])
+
+    def test_boundary_disagreement_and_wink_are_unknown(self):
+        for ears, margins in [
+            ([0.24, 0.24], [-1, -1]),
+            ([0.26, 0.26], [1, 1]),
+            ([0.14, 0.37], [1, 1]),
+            ([0, 0], [1, 1]),
+        ]:
+            self.assertIsNone(classify_observation(ears, margins)[0])
+        self.assertEqual(observation_status({"closed": None}, True), "UNCERTAIN")
+
+    def test_geometry_only_and_near_threshold_agreement(self):
+        self.assertTrue(classify_observation([0.24, 0.24], [1, 1])[0])
+        self.assertFalse(classify_observation([0.26, 0.26], [-1, -1])[0])
+        self.assertTrue(classify_observation([0.2, 0.2], None)[0])
+
     def test_grayscale_and_color_have_same_features(self):
         eye = np.random.default_rng(7).integers(0, 255, (45, 80), dtype=np.uint8)
         np.testing.assert_allclose(

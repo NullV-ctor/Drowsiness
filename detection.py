@@ -71,8 +71,47 @@ class ClosureTracker:
         return elapsed, elapsed >= self.duration
 
 
+def classify_observation(ears, margins=None, threshold=0.25, mode="hybrid"):
+    """Conservative full-face inference; crop-domain SVM scores are not probabilities.
+
+    Strong bilateral geometry takes priority in hybrid mode. In the boundary band
+    require agreement; a wink, disagreement, or invalid geometry is unknown.
+    This rule has no claimed MRL or driving-video accuracy.
+    """
+    ears = np.asarray(ears, dtype=float)
+    if ears.shape != (2,) or not np.isfinite(ears).all() or np.any(ears <= 0):
+        return None, "Invalid eye landmarks"
+    geometric = bool(np.all(ears < threshold))
+    if mode == "ear" or margins is None:
+        if np.any(ears < threshold) and not geometric:
+            return None, "Eyes disagree; face the camera"
+        return geometric, "EAR geometry"
+    svm_closed = bool(np.all(np.asarray(margins) >= 0))
+    if mode == "svm":
+        return svm_closed, "Experimental SVM eye crops"
+    if np.all(ears <= threshold - 0.04):
+        return True, "Both eyes geometrically closed"
+    if np.all(ears >= threshold + 0.04):
+        return False, "Both eyes geometrically open"
+    if np.any(ears < threshold) != np.all(ears < threshold):
+        return None, "Eyes disagree; face the camera"
+    if geometric != svm_closed:
+        return None, "SVM and EAR disagree; adjust lighting or sensitivity"
+    return geometric, "SVM and EAR agree"
+
+
+def observation_status(observation, alarm=False):
+    if observation is None:
+        return "NO FACE"
+    if observation["closed"] is None:
+        return "UNCERTAIN"
+    if alarm:
+        return "DROWSY"
+    return "EYES CLOSED" if observation["closed"] else "EYES OPEN"
+
+
 class FaceEyeDetector:
-    def __init__(self, model_path=None, predictor_path=PREDICTOR_PATH):
+    def __init__(self, model_path=None, predictor_path=PREDICTOR_PATH, mode="hybrid"):
         if not Path(predictor_path).is_file():
             raise FileNotFoundError(
                 f"Extract the landmark predictor first: {predictor_path}"
@@ -80,9 +119,10 @@ class FaceEyeDetector:
         self.detector = dlib.get_frontal_face_detector()
         self.predictor = dlib.shape_predictor(str(predictor_path))
         self.classifier = EyeClassifier(model_path) if model_path else None
+        self.mode = mode if self.classifier else "ear"
         self.lock = Lock()
 
-    def observe(self, frame, ear_threshold=0.3, upsample=1):
+    def observe(self, frame, ear_threshold=0.25, upsample=1):
         """Monitor the largest face only. Do not accumulate time across faces."""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         with self.lock:
@@ -93,16 +133,15 @@ class FaceEyeDetector:
             shape = self.predictor(gray, face)
             points = np.array([(shape.part(i).x, shape.part(i).y) for i in range(68)])
         eyes = [points[36:42], points[42:48]]
-        ear = float(np.mean([eye_aspect_ratio(eye) for eye in eyes]))
+        ears = [eye_aspect_ratio(eye) for eye in eyes]
+        ear = float(np.mean(ears))
         margins = None
         if self.classifier:
             crops = [crop_eye(gray, eye) for eye in eyes]
             if any(crop.size == 0 for crop in crops):
                 return None
             margins = self.classifier.decision_function(crops)
-            closed = bool(np.all(margins >= 0))
-        else:
-            closed = ear < ear_threshold
+        closed, reason = classify_observation(ears, margins, ear_threshold, self.mode)
         return {
             "closed": closed,
             "ear": ear,
@@ -110,6 +149,8 @@ class FaceEyeDetector:
             "box": (face.left(), face.top(), face.right(), face.bottom()),
             "face_count": len(faces),
             "margins": margins.tolist() if margins is not None else None,
+            "reason": reason,
+            "eye_ears": ears,
         }
 
 
@@ -121,9 +162,11 @@ def annotate(frame, observation, status, elapsed=0.0):
     color = (
         (0, 0, 255)
         if status == "DROWSY"
-        else (0, 200, 255)
-        if status in ("EYES CLOSED", "NO FACE")
-        else (70, 210, 80)
+        else (
+            (0, 200, 255)
+            if status in ("EYES CLOSED", "NO FACE", "UNCERTAIN")
+            else (70, 210, 80)
+        )
     )
     if observation:
         x1, y1, x2, y2 = observation["box"]
@@ -156,7 +199,7 @@ def annotate(frame, observation, status, elapsed=0.0):
     return output
 
 
-def analyze_frame(detector, tracker, frame, timestamp, ear_threshold=0.3):
+def analyze_frame(detector, tracker, frame, timestamp, ear_threshold=0.25):
     # Keep inference affordable and avoid overwhelming browser streams.
     if frame.shape[1] > 800:
         frame = cv2.resize(frame, (800, round(frame.shape[0] * 800 / frame.shape[1])))
@@ -166,19 +209,12 @@ def analyze_frame(detector, tracker, frame, timestamp, ear_threshold=0.3):
         timestamp,
         observation["box"] if observation else None,
     )
-    status = (
-        "NO FACE"
-        if observation is None
-        else "DROWSY"
-        if drowsy
-        else "EYES CLOSED"
-        if observation["closed"]
-        else "EYES OPEN"
-    )
+    status = observation_status(observation, drowsy)
     return annotate(frame, observation, status, elapsed), {
         "time_seconds": round(timestamp, 3),
         "status": status,
         "ear": observation["ear"] if observation else None,
         "closed_seconds": round(elapsed, 3),
         "faces": observation["face_count"] if observation else 0,
+        "reason": observation.get("reason", "") if observation else "No face detected",
     }

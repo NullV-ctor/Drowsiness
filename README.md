@@ -1,3 +1,21 @@
+## November 2026 inference and interface fixes
+
+The recommended application mode is **Hybrid**, combining bilateral eye geometry with SVM agreement near the EAR threshold (default 0.25, guard band ±0.04). Two user-supplied full-face photos exposed a domain mismatch: the MRL eye-crop SVM predicted both incorrectly while landmark geometry separated them. Hybrid corrects those regression examples. This is a functional fix, not a measured accuracy improvement. Saved 87.71% accuracy remains for the original SVM on held-out MRL eye crops only. SVM-only is available as an experimental option; uncertain or disagreeing observations reset the closure timer and cannot trigger an alert.
+
+The workspace selector executes only the selected page, so camera fragments do not run behind upload/report pages. Browser controls use explicit dark backgrounds and light text, responsive frame height, visible Start/Stop states, and cancellation of pending camera requests. Switching away releases the browser camera. Screenshot consent and Telegram messaging are independent permissions: Telegram stays disabled until real bot token and test chat ID are configured in Streamlit secrets. The sidebar includes setup instructions.
+
+Recorded videos sample approximately five frames per second, use media timestamps (frame-index/fps fallback), and display episode time slots, counts, and CSV downloads. Analysis is limited to the first 120 seconds. Missing/uncertain faces and face changes break continuous closure. Video review never sends TEST messages or saves consented episode screenshots. Sampling can miss short blinks and is not a substitute for labeled full-video validation.
+
+Validation commands:
+
+```bash
+python -m unittest discover -s tests -v
+node tests/test_browser_controls.js
+node tests/test_https_camera.js
+```
+
+Use Python 3.11 or 3.12 for the pinned NumPy/OpenCV environment; an existing Python 3.14 venv should not be used to install these pins.
+
 # Driver Drowsiness Detection
 
 Train an open/closed-eye classifier in one Jupyter notebook and use a Streamlit frontend for browser webcam, photo, and recorded-video analysis. The original OpenCV webcam scripts are also available.

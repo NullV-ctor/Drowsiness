@@ -102,7 +102,7 @@ def run_face_benchmark(manifest, model, output="reports/matched_faces"):
         raise ValueError(
             f"Test subject IDs overlap classifier training people: {sorted(overlap)}"
         )
-    detector = FaceEyeDetector(model_path=model)
+    detector = FaceEyeDetector(model_path=model, mode="svm")
     observations, hashes = [], {}
     for row in frame.itertuples():
         image = cv2.imread(row.path)

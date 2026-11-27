@@ -571,19 +571,27 @@ def evaluate_and_export(
     predictions = test.copy()
     predictions["predicted_label"], predictions["closed_margin"] = predicted, scores
     predictions.to_csv(report_dir / "test_predictions.csv", index=False)
-    predictions.groupby("subject_id").apply(
+    predictions.groupby("subject_id")[
+        ["label", "predicted_label", "closed_margin"]
+    ].apply(
         lambda f: pd.Series(binary_metrics(f.label, f.predicted_label, f.closed_margin))
-    ).to_csv(report_dir / "test_metrics_per_person.csv")
+    ).to_csv(
+        report_dir / "test_metrics_per_person.csv"
+    )
     for field in ("glasses", "lighting", "sensor", "gender"):
         if field in predictions:
-            predictions.groupby(field).apply(
+            predictions.groupby(field)[
+                ["label", "predicted_label", "closed_margin"]
+            ].apply(
                 lambda f: pd.Series(
                     {
                         "n": len(f),
                         **binary_metrics(f.label, f.predicted_label, f.closed_margin),
                     }
                 )
-            ).to_csv(report_dir / f"test_metrics_by_{field}.csv")
+            ).to_csv(
+                report_dir / f"test_metrics_by_{field}.csv"
+            )
     fig, axes = plt.subplots(1, 2, figsize=(11, 5))
     ConfusionMatrixDisplay.from_predictions(
         y_test,

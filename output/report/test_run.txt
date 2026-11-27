@@ -1,36 +1,11 @@
-test_render_reports_and_opt_in_controls (test_app.AppTests.test_render_reports_and_opt_in_controls) ... 2026-11-27 02:51:05.313 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
-2026-11-27 02:51:05.313 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
-2026-11-27 02:51:05.314 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
-2026-11-27 02:51:05.314 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
-2026-11-27 02:51:05.316 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
-2026-11-27 02:51:05.318 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
-2026-11-27 02:51:05.486 DEBUG   streamlit.runtime.scriptrunner.script_runner: Running script
-2026-11-27 02:51:05.486 DEBUG   streamlit.runtime.media_file_manager: Disconnecting files for session with ID test session id
-2026-11-27 02:51:05.486 DEBUG   streamlit.runtime.media_file_manager: Sessions still active: dict_keys([])
-2026-11-27 02:51:05.486 DEBUG   streamlit.runtime.media_file_manager: Files: 0; Sessions with files: 0
-2026-11-27 02:51:05.505 DEBUG   streamlit.runtime.caching.cache_resource_api: Creating new ResourceCache (key=9104e21bfa6bb6c1318672f883081838)
-2026-11-27 02:51:05.505 DEBUG   streamlit.runtime.caching.cache_utils: Cache key: cae66941d9efbd404e4d88758ea67670
-2026-11-27 02:51:05.562 DEBUG   streamlit.runtime.caching.cache_resource_api: Creating new ResourceCache (key=dbfd9bbdefa1b5bce812fc3dcf4f1cc5)
-2026-11-27 02:51:05.562 DEBUG   streamlit.runtime.caching.cache_utils: Cache key: 6e73440669558f6f95b86516e5823d9c
-2026-11-27 02:51:06.199 DEBUG   streamlit.runtime.memory_media_file_storage: Adding media file 312d6deaa6ea0295e011b665857d0a44
-2026-11-27 02:51:06.200 DEBUG   streamlit.runtime.memory_media_file_storage: Adding media file 248e06b69b9f61a3dbf60c5ae305580e
-2026-11-27 02:51:06.250 DEBUG   streamlit.runtime.memory_media_file_storage: Adding media file f881c71130a438ddcf09b4e9d9f88291
-2026-11-27 02:51:06.324 DEBUG   streamlit.runtime.memory_media_file_storage: Adding media file 3ecf69eaf00bbc8780a007381003f5ba
-2026-11-27 02:51:06.325 DEBUG   streamlit.runtime.media_file_manager: Removing orphaned files...
-2026-11-27 02:51:06.325 DEBUG   streamlit.runtime.media_file_manager: Removing orphaned deferred callables...
-2026-11-27 02:51:06.329 DEBUG   streamlit.runtime.scriptrunner.script_runner: Beginning script thread
-2026-11-27 02:51:06.329 DEBUG   streamlit.runtime.scriptrunner.script_runner: Running script
-2026-11-27 02:51:06.329 DEBUG   streamlit.runtime.media_file_manager: Disconnecting files for session with ID test session id
-2026-11-27 02:51:06.329 DEBUG   streamlit.runtime.media_file_manager: Sessions still active: dict_keys([])
-2026-11-27 02:51:06.329 DEBUG   streamlit.runtime.media_file_manager: Files: 0; Sessions with files: 0
-2026-11-27 02:51:06.346 DEBUG   streamlit.runtime.caching.cache_utils: Cache key: cae66941d9efbd404e4d88758ea67670
-2026-11-27 02:51:06.348 DEBUG   streamlit.runtime.caching.cache_utils: Cache key: 6e73440669558f6f95b86516e5823d9c
-2026-11-27 02:51:06.354 DEBUG   streamlit.runtime.memory_media_file_storage: Adding media file 1c6aee91dec85117e54a26908e35f2d2
-2026-11-27 02:51:06.355 DEBUG   streamlit.runtime.memory_media_file_storage: Adding media file 248e06b69b9f61a3dbf60c5ae305580e
-2026-11-27 02:51:06.401 DEBUG   streamlit.runtime.memory_media_file_storage: Adding media file f881c71130a438ddcf09b4e9d9f88291
-2026-11-27 02:51:06.474 DEBUG   streamlit.runtime.memory_media_file_storage: Adding media file 3ecf69eaf00bbc8780a007381003f5ba
-2026-11-27 02:51:06.474 DEBUG   streamlit.runtime.media_file_manager: Removing orphaned files...
-2026-11-27 02:51:06.474 DEBUG   streamlit.runtime.media_file_manager: Removing orphaned deferred callables...
+test_configured_messaging_is_independent_of_screenshot_consent (test_app.AppTests.test_configured_messaging_is_independent_of_screenshot_consent) ... 2026-11-27 09:48:25.095 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+ok
+test_render_reports_and_opt_in_controls (test_app.AppTests.test_render_reports_and_opt_in_controls) ... 2026-11-27 09:48:26.580 No runtime found, using MemoryCacheStorageManager
+2026-11-27 09:48:26.580 No runtime found, using MemoryCacheStorageManager
+2026-11-27 09:48:26.581 No runtime found, using MemoryCacheStorageManager
+2026-11-27 09:48:26.581 No runtime found, using MemoryCacheStorageManager
+2026-11-27 09:48:26.583 No runtime found, using MemoryCacheStorageManager
+2026-11-27 09:48:26.586 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
 ok
 test_stale_future_or_invalid_frames_are_rejected (test_camera_transport.CameraTransportTests.test_stale_future_or_invalid_frames_are_rejected) ... ok
 test_valid_frame (test_camera_transport.CameraTransportTests.test_valid_frame) ... ok
@@ -50,7 +25,9 @@ test_07_two_separate_episodes_two_screenshots (test_episodes.EpisodeTests.test_0
 test_08_flicker_same_episode_but_emergency_clock_resets (test_episodes.EpisodeTests.test_08_flicker_same_episode_but_emergency_clock_resets) ... ok
 test_09_no_face_does_not_count_as_closure (test_episodes.EpisodeTests.test_09_no_face_does_not_count_as_closure) ... ok
 test_10_denied_location_does_not_block_message_or_video (test_episodes.EpisodeTests.test_10_denied_location_does_not_block_message_or_video) ... ok
-test_11_report_only_date_slots_count_and_correct_end (test_episodes.EpisodeTests.test_11_report_only_date_slots_count_and_correct_end) ... ok
+test_11_report_only_date_slots_count_and_correct_end (test_episodes.EpisodeTests.test_11_report_only_date_slots_count_and_correct_end) ... /home/lokesh-sharma/anaconda3/lib/python3.11/site-packages/fontTools/misc/py23.py:11: DeprecationWarning: The py23 module has been deprecated and will be removed in a future release. Please update your code.
+  warnings.warn(
+ok
 test_gap_cannot_satisfy_emergency_continuity (test_episodes.EpisodeTests.test_gap_cannot_satisfy_emergency_continuity) ... ok
 test_no_consent_no_image_and_delete_does_not_recapture (test_episodes.EpisodeTests.test_no_consent_no_image_and_delete_does_not_recapture) ... ok
 test_two_emergency_episodes_each_get_one_job (test_episodes.EpisodeTests.test_two_emergency_episodes_each_get_one_job) ... ok
@@ -59,10 +36,13 @@ test_large_gap_and_reversed_time_reset (test_pipeline.ClosureTests.test_large_ga
 test_no_face_resets_timer (test_pipeline.ClosureTests.test_no_face_resets_timer) ... ok
 test_sustained_closure_and_reopen (test_pipeline.ClosureTests.test_sustained_closure_and_reopen) ... ok
 test_switching_face_resets_timer (test_pipeline.ClosureTests.test_switching_face_resets_timer) ... ok
+test_boundary_disagreement_and_wink_are_unknown (test_pipeline.FeatureTests.test_boundary_disagreement_and_wink_are_unknown) ... ok
 test_empty_eye_rejected (test_pipeline.FeatureTests.test_empty_eye_rejected) ... ok
 test_export_matches_sklearn_and_validates_version (test_pipeline.FeatureTests.test_export_matches_sklearn_and_validates_version) ... ok
 test_eye_geometry_and_edge_crop (test_pipeline.FeatureTests.test_eye_geometry_and_edge_crop) ... ok
+test_geometry_only_and_near_threshold_agreement (test_pipeline.FeatureTests.test_geometry_only_and_near_threshold_agreement) ... ok
 test_grayscale_and_color_have_same_features (test_pipeline.FeatureTests.test_grayscale_and_color_have_same_features) ... ok
+test_hybrid_corrects_strong_geometry_svm_disagreement (test_pipeline.FeatureTests.test_hybrid_corrects_strong_geometry_svm_disagreement) ... ok
 test_clean_dataset_eda_handles_an_empty_issue_table (test_training.TrainingTests.test_clean_dataset_eda_handles_an_empty_issue_table) ... ok
 test_conflict_exclusion_removes_every_copy_without_relabeling (test_training.TrainingTests.test_conflict_exclusion_removes_every_copy_without_relabeling) ... ok
 test_conflicting_labels_are_blocked (test_training.TrainingTests.test_conflicting_labels_are_blocked) ... ok
@@ -74,8 +54,13 @@ ok
 test_mrl_label_mapping_and_safe_import (test_training.TrainingTests.test_mrl_label_mapping_and_safe_import) ... ok
 test_predefined_person_leakage_is_blocked (test_training.TrainingTests.test_predefined_person_leakage_is_blocked) ... ok
 test_split_and_cap_preserve_test_and_person_isolation (test_training.TrainingTests.test_split_and_cap_preserve_test_and_person_isolation) ... ok
+test_decode_sampling_media_time_and_episode_end (test_video.VideoTests.test_decode_sampling_media_time_and_episode_end) ... ok
+test_invalid_clip_and_invalid_fps_are_rejected_and_released (test_video.VideoTests.test_invalid_clip_and_invalid_fps_are_rejected_and_released) ... [mov,mp4,m4a,3gp,3g2,mj2 @ 0x34b8c840] moov atom not found
+ok
+test_limit_and_active_episode_are_reported (test_video.VideoTests.test_limit_and_active_episode_are_reported) ... ok
+test_no_face_and_uncertain_cannot_create_episodes (test_video.VideoTests.test_no_face_and_uncertain_cannot_create_episodes) ... ok
 
 ----------------------------------------------------------------------
-Ran 41 tests in 2.967s
+Ran 49 tests in 5.520s
 
 OK

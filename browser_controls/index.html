@@ -1,9 +1,12 @@
 <!doctype html><html><head><meta charset="utf-8"><style>
-body{font:14px system-ui;margin:8px;color:inherit;color-scheme:light dark}button{padding:9px 12px;margin:4px;border:1px solid #aaa;border-radius:6px;background:#fff;cursor:pointer}p{margin:5px}#status{white-space:pre-line}
-video{width:100%;max-height:340px;background:#222;border-radius:8px}#camera{display:none}
+:root{color-scheme:dark}*{box-sizing:border-box}body{font:14px system-ui;margin:0;padding:8px;color:#edf3fc;background:#141d2d;line-height:1.5;border-radius:12px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}button{font:600 14px system-ui;padding:11px 16px;min-height:44px;border:1px solid #64748b;border-radius:8px;background:#24344d;color:#fff;cursor:pointer}
+button:hover{background:#354d70}button:focus-visible{outline:3px solid #67e8f9;outline-offset:2px}button:disabled{opacity:.5;cursor:not-allowed}
+#startCamera{background:#0b765b;border-color:#34d399}#stopCamera{background:#9f263c;border-color:#fb7185}p{margin:8px 0}#status,#cameraStatus{white-space:pre-line;color:#dce9fa}
+video{display:block;width:100%;max-height:340px;min-height:140px;background:#080d16;border-radius:8px;object-fit:contain}#camera{display:none}
 </style></head><body>
-<div id="camera"><video id="preview" autoplay muted playsinline></video><button id="startCamera">Start camera</button><button id="stopCamera">Stop camera</button><p id="cameraStatus">Camera stopped.</p></div>
-<button id="sound">Enable browser alarm</button><button id="location">Allow current location</button><button id="stopLocation">Stop location sharing</button>
+<div class="controls"><button id="sound">Enable browser alarm</button><button id="location">Allow current location</button><button id="stopLocation">Stop location sharing</button></div>
+<div id="camera"><div class="controls"><button id="startCamera">Start camera</button><button id="stopCamera" disabled>Stop camera</button></div><video id="preview" autoplay muted playsinline></video><p id="cameraStatus" role="status">Camera stopped.</p></div>
 <p id="status" role="status">Alarm disabled. Location not requested.</p>
 <script>
 const post=(type,data={})=>window.parent.postMessage({isStreamlitMessage:true,type,...data},'*');
@@ -13,33 +16,42 @@ let cameraValue={};
 const publish=()=>{post('streamlit:setComponentValue',{value:{...cameraValue,armed,location:fix,location_status:locationStatus,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone},dataType:'json'});};
 function silence(){if(osc){try{osc.stop();osc.disconnect();}catch(e){}osc=null;}alarm=false;status();}
 function sound(){if(document.hidden||!armed||!ctx||ctx.state!=='running')return;alarm=true;if(!osc){osc=ctx.createOscillator();gain=ctx.createGain();gain.gain.value=.12;osc.frequency.value=880;osc.connect(gain);gain.connect(ctx.destination);osc.start();}status();}
-document.getElementById('sound').onclick=async()=>{if(armed){armed=false;silence();}else{ctx=ctx||new(window.AudioContext||window.webkitAudioContext)();await ctx.resume();armed=true;}
+document.getElementById('sound').onclick=async()=>{if(armed){armed=false;silence();}else{try{ctx=ctx||new(window.AudioContext||window.webkitAudioContext)();await ctx.resume();armed=ctx.state==='running';}catch(error){armed=false;document.getElementById('status').textContent='Audio unavailable. Check browser sound permissions.';publish();return;}}
 document.getElementById('sound').textContent=armed?'Disable browser alarm':'Enable browser alarm';status();publish();};
 document.getElementById('location').onclick=()=>{if(!navigator.geolocation){locationStatus='unavailable';status();publish();return;}
 if(watch!==null)navigator.geolocation.clearWatch(watch);locationStatus='requesting permission';status();
 sharing=true;watch=navigator.geolocation.watchPosition(pos=>{if(!sharing)return;fix={latitude:pos.coords.latitude,longitude:pos.coords.longitude,accuracy:pos.coords.accuracy,timestamp:pos.timestamp/1000};locationStatus=`available (+/-${pos.coords.accuracy.toFixed(0)} m)`;status();if(Date.now()-lastPublish>1500){lastPublish=Date.now();publish();}},err=>{if(!sharing)return;fix=null;locationStatus=err.code===1?'denied':'unavailable';status();publish();},{enableHighAccuracy:true,maximumAge:0,timeout:10000});};
 document.getElementById('stopLocation').onclick=()=>{if(watch!==null)navigator.geolocation.clearWatch(watch);watch=null;sharing=false;fix=null;locationStatus='stopped';status();publish();};
 window.addEventListener('message',event=>{if(event.source!==window.parent||event.data.type!=='streamlit:render')return;
-lastHeartbeat=Date.now();if(event.data.args.camera!==undefined&&window.cameraRender)window.cameraRender(event.data.args);if(event.data.args.alarm)sound();else silence();});
+lastHeartbeat=Date.now();if(event.data.args.camera!==undefined&&window.cameraRender)window.cameraRender(event.data.args);if(event.data.args.alarm&&(!event.data.args.camera||window.cameraIsActive?.()))sound();else silence();});
 // Stop on a stalled/disconnected app, hidden tab, navigation, or stopped stream.
 setInterval(()=>{if(Date.now()-lastHeartbeat>700)silence();},100);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)silence();});
 window.addEventListener('pagehide',()=>{silence();if(watch!==null)navigator.geolocation.clearWatch(watch);});
-post('streamlit:componentReady',{apiVersion:1});post('streamlit:setFrameHeight',{height:120});status();
+post('streamlit:componentReady',{apiVersion:1});post('streamlit:setFrameHeight',{height:190});status();
 </script><script>
 // One frame in flight: server acknowledges before another JPEG is captured.
-let cameraStream=null,pending=false,sequence=Date.now(),lastSent=0,enabled=false;
+let cameraStream=null,pending=false,sequence=Date.now(),lastSent=0,enabled=false,starting=false,startRequest=0;
 const video=document.getElementById('preview'), cameraStatus=document.getElementById('cameraStatus');
 const canvas=document.createElement('canvas');canvas.width=480;canvas.height=360;
-function stopCamera(){if(cameraStream)cameraStream.getTracks().forEach(track=>track.stop());cameraStream=null;video.srcObject=null;pending=false;cameraValue={camera_active:false};silence();cameraStatus.textContent='Camera stopped.';publish();}
+window.cameraIsActive=()=>!!cameraStream;
+function cameraButtons(){document.getElementById('startCamera').disabled=!!cameraStream||starting;document.getElementById('stopCamera').disabled=!cameraStream&&!starting;document.getElementById('startCamera').textContent=starting?'Opening camera…':'Start camera';}
+function stopCamera(){startRequest++;starting=false;if(cameraStream)cameraStream.getTracks().forEach(track=>track.stop());cameraStream=null;video.srcObject=null;pending=false;cameraValue={camera_active:false};silence();cameraStatus.textContent='Camera stopped.';cameraButtons();publish();}
 document.getElementById('startCamera').onclick=async()=>{
- if(cameraStream)return;
- try{cameraStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:480},height:{ideal:360},frameRate:{ideal:8,max:10}},audio:false});
- video.srcObject=cameraStream;await video.play();cameraStatus.textContent='Camera connected. Waiting for analysis.';cameraValue={camera_active:true};publish();}
- catch(error){stopCamera();cameraStatus.textContent=error.name==='NotAllowedError'?'Camera permission denied. Allow camera access in your browser and try again.':'Camera unavailable. Close other camera apps, then try again.';}
+ if(cameraStream||starting)return;
+ const request=++startRequest;starting=true;cameraButtons();cameraStatus.textContent='Requesting camera permission…';
+ try{
+ if(!navigator.mediaDevices?.getUserMedia)throw {name:'UnavailableError'};
+ const stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:480},height:{ideal:360},frameRate:{ideal:8,max:10}},audio:false});
+ if(request!==startRequest){stream.getTracks().forEach(track=>track.stop());return;}
+ cameraStream=stream;video.srcObject=stream;await video.play();
+ if(request!==startRequest)return;
+ starting=false;cameraButtons();cameraStatus.textContent='Camera connected. Waiting for analysis.';cameraValue={camera_active:true};publish();
+ }catch(error){if(request!==startRequest)return;stopCamera();cameraStatus.textContent=error.name==='NotAllowedError'?'Camera permission denied. Allow camera access in your browser and try again.':'Camera unavailable. Use HTTPS or localhost, close other camera apps, then try again.';}
 };
 document.getElementById('stopCamera').onclick=stopCamera;
-window.cameraRender=args=>{enabled=!!args.camera;document.getElementById('camera').style.display=enabled?'block':'none';post('streamlit:setFrameHeight',{height:enabled?510:120});
+window.cameraRender=args=>{enabled=!!args.camera;document.getElementById('camera').style.display=enabled?'block':'none';post('streamlit:setFrameHeight',{height:document.body.scrollHeight?Math.ceil(document.body.scrollHeight)+12:(enabled?620:190)});
+ if(!enabled&&(cameraStream||starting))stopCamera();
  if(pending&&args.ack===cameraValue.frame_id){pending=false;cameraValue={camera_active:!!cameraStream};}
  if(cameraStream&&args.camera_status)cameraStatus.textContent=args.camera_status;
 };
@@ -53,5 +65,6 @@ setInterval(()=>{
  pending=true;lastSent=Date.now();publish();
 },200);
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&cameraStream)stopCamera();});
-window.addEventListener('pagehide',()=>{if(cameraStream)cameraStream.getTracks().forEach(track=>track.stop());});
+window.addEventListener('pagehide',stopCamera);
+if(typeof ResizeObserver!=='undefined'){new ResizeObserver(()=>{post('streamlit:setFrameHeight',{height:Math.ceil(document.body.scrollHeight)+12});}).observe(document.body);}
 </script></body></html>

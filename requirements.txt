@@ -2,7 +2,7 @@
 # Keep the NumPy 1.x ABI used by existing Anaconda scientific packages.
 
 # Image processing and facial landmarks
-numpy>=2.1.0,<3
+numpy==1.26.4
 opencv-python==4.10.0.84
 dlib>=19.24,<21
 
